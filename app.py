@@ -194,6 +194,17 @@ def show_dashboard():
 
 
 def resident_management():
+    # Reset only after a successful insert, before creating any form widgets.
+    if st.session_state.pop("_resident_saved", False):
+        for key in (
+            "new_owner", "new_plate", "new_house", "new_phone", "new_note",
+            "new_province", "new_active", "resident_ocr_text", "resident_ocr_conf",
+            "resident_ocr_preview", "resident_ocr_message", "resident_province_suggestion",
+        ):
+            st.session_state.pop(key, None)
+        st.success("เพิ่มข้อมูลเรียบร้อย")
+    st.session_state.setdefault("new_plate", "")
+    st.session_state.setdefault("new_province", "ไม่ระบุ")
     st.subheader("เพิ่มข้อมูลลูกบ้าน / รถ")
 
     # อัปโหลดภาพป้ายทะเบียน
@@ -328,13 +339,12 @@ def resident_management():
     if st.session_state.get("new_province", "ไม่ระบุ") not in provinces:
         st.session_state["new_province"] = "ไม่ระบุ"
 
-    with st.form("add_resident_form", clear_on_submit=True):
+    with st.form("add_resident_form", clear_on_submit=False):
         c1, c2 = st.columns(2)
         owner = c1.text_input("ชื่อเจ้าของรถ *", key="new_owner")
         plate = c2.text_input("ทะเบียนรถ *", placeholder="เช่น 9กน 7038", key="new_plate")
         province = st.selectbox(
             "จังหวัดบนป้ายทะเบียน", provinces,
-            index=provinces.index(st.session_state.get("new_province", "ไม่ระบุ")),
             key="new_province"
         )
         c3, c4 = st.columns(2)
@@ -345,10 +355,14 @@ def resident_management():
         submitted = st.form_submit_button("เพิ่มทะเบียน", type="primary")
         if submitted:
             try:
+                # Validate the submitted inputs; never silently replace an empty
+                # plate with a stale OCR result from another image.
+                if not owner.strip():
+                    raise ValueError("กรุณากรอกชื่อเจ้าของรถ ข้อมูลอื่นยังอยู่ในฟอร์ม")
+                if not normalize_for_match(plate):
+                    raise ValueError("กรุณากรอกทะเบียนในช่องทะเบียนรถ ผลอ่านบนภาพยังไม่ใช่การบันทึก ข้อมูลอื่นยังอยู่ในฟอร์ม")
                 db.add_resident(owner, plate, house, phone, note, active, province=province)
-                st.success("เพิ่มข้อมูลเรียบร้อย")
-                for key in ("resident_ocr_text", "resident_ocr_conf", "resident_ocr_preview", "resident_province_suggestion"):
-                    st.session_state.pop(key, None)
+                st.session_state["_resident_saved"] = True
                 st.rerun()
             except Exception as exc:
                 if "UNIQUE constraint failed" in str(exc):
