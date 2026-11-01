@@ -512,7 +512,7 @@ def process_uploaded_video(model):
 
                     frame_idx = 0
 
-                    logged = set()
+                    logged = {}
 
                     try:
 
@@ -577,11 +577,11 @@ def process_uploaded_video(model):
 
                                                             })
 
-                                                            # Record each normalized plate once per video to avoid frame spam.
+                                                            # Record the first result and allow one upgrade from denied to authorized.
 
                                                             normalized = normalize_for_match(plate_text)
 
-                                                            if normalized and normalized not in logged:
+                                                            if normalized and (normalized not in logged or (authorized and not logged[normalized])):
 
                                                                       db.add_vehicle_log(
 
@@ -593,7 +593,7 @@ def process_uploaded_video(model):
 
                                                                       )
 
-                                                                      logged.add(normalized)
+                                                                      logged[normalized] = bool(authorized)
 
                                                   else:
 
